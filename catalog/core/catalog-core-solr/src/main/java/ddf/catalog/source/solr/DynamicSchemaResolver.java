@@ -36,34 +36,6 @@ import ddf.catalog.data.impl.MetacardImpl;
 import ddf.catalog.data.impl.MetacardTypeImpl;
 import ddf.catalog.data.types.Validation;
 import ddf.catalog.source.solr.json.MetacardTypeMapperFactory;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.Serializable;
-import java.io.StringReader;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLStreamConstants;
-import javax.xml.stream.XMLStreamException;
-import javax.xml.stream.XMLStreamReader;
 import lux.Config;
 import lux.xml.SaxonDocBuilder;
 import lux.xml.XmlReader;
@@ -89,6 +61,36 @@ import org.codehaus.stax2.XMLInputFactory2;
 import org.codice.solr.client.solrj.SolrClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
+import java.io.StringReader;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * This class tries to resolve all user given field names to their corresponding dynamic Solr index
@@ -276,33 +278,30 @@ public class DynamicSchemaResolver {
     MetacardType schema = metacard.getMetacardType();
 
     // TODO: register these metacard types when a new one is seen
+    if (metacard.getAttribute("title").getValue().equals("the title")) {
+      Set<String> coreAttrs = new HashSet<>();
+      coreAttrs.add("title");
+      coreAttrs.add("description");
+      coreAttrs.add("metacard-tags");
+      Set<String> metadatacontactAttrs = new HashSet<>();
+      metadatacontactAttrs.add("ext.metadata-contact-name");
+      metadatacontactAttrs.add("ext.metadata-contact-phone");
+      metadatacontactAttrs.add("ext.metadata-contact-fax");
+      metadatacontactAttrs.add("ext.metadata-contact-address");
+      metadatacontactAttrs.add("ext.metadata-contact-city");
+      metadatacontactAttrs.add("ext.metadata-contact-country-trigraph");
+      metadatacontactAttrs.add("ext.metadata-contact-country-digraph");
+      metadatacontactAttrs.add("ext.metadata-contact-email");
+      metadatacontactAttrs.add("ext.metadata-contact-url");
 
-    for (AttributeDescriptor ad : schema.getAttributeDescriptors()) {
-      if (metacard.getAttribute(ad.getName()) != null) {
-        List<Serializable> attributeValues = metacard.getAttribute(ad.getName()).getValues();
+      String schemaName = String.format("%s#%s", schema.getName(), schema.hashCode());
 
-        if (CollectionUtils.isNotEmpty(attributeValues) && attributeValues.get(0) != null) {
-          AttributeFormat format = ad.getType().getAttributeFormat();
-          String formatIndexName = ad.getName() + getFieldSuffix(format);
-
-          if (AttributeFormat.XML.equals(format)
-              && solrInputDocument.getFieldValue(
-                      formatIndexName + getSpecialIndexSuffix(AttributeFormat.STRING))
-                  == null) {
-            List<String> parsedTexts = parseTextFrom(attributeValues);
-
-            // parsedTexts => *_txt_tokenized
-            String specialStringIndexName =
-                ad.getName()
-                    + getFieldSuffix(AttributeFormat.STRING)
-                    + getSpecialIndexSuffix(AttributeFormat.STRING);
-            solrInputDocument.addField(specialStringIndexName, parsedTexts);
-          } else if (AttributeFormat.STRING.equals(format)
-              && solrInputDocument.getFieldValue(
-                      ad.getName() + getFieldSuffix(AttributeFormat.STRING))
-                  == null) {
+      for (String attr : coreAttrs) {
+        if (metacard.getAttribute(attr) != null) {
+          List<Serializable> attrVals = metacard.getAttribute(attr).getValues();
+          if (CollectionUtils.isNotEmpty(attrVals) && attrVals.get(0) != null) {
             List<Serializable> truncatedValues =
-                attributeValues
+                attrVals
                     .stream()
                     .map(
                         value ->
@@ -312,89 +311,159 @@ public class DynamicSchemaResolver {
                     .collect(Collectors.toList());
             // *_txt
             solrInputDocument.addField(
-                ad.getName() + getFieldSuffix(AttributeFormat.STRING), truncatedValues);
+                attr + getFieldSuffix(AttributeFormat.STRING), truncatedValues);
 
             // *_txt_tokenized
             solrInputDocument.addField(
-                ad.getName()
+                attr
                     + getFieldSuffix(AttributeFormat.STRING)
                     + getSpecialIndexSuffix(AttributeFormat.STRING),
-                attributeValues);
-          } else if (AttributeFormat.OBJECT.equals(format)) {
-            ByteArrayOutputStream byteArrayOS = new ByteArrayOutputStream();
-            List<Serializable> byteArrays = new ArrayList<>();
+                truncatedValues);
+          }
+        }
+      }
 
-            try (ObjectOutputStream out = new ObjectOutputStream(byteArrayOS)) {
-              for (Serializable serializable : attributeValues) {
-                out.writeObject(serializable);
-                byteArrays.add(byteArrayOS.toByteArray());
-                out.reset();
+      int children = metacard.getAttribute("ext.metadata-contact-name").getValues().size();
+      for (int i = 0; i < children; i++) {
+        SolrInputDocument child = new SolrInputDocument();
+        for (String attr : metadatacontactAttrs) {
+          if (metacard.getAttribute(attr) != null
+              && !(metacard.getAttribute(attr).getValues().get(i).equals(""))) {
+            Serializable attrVal = metacard.getAttribute(attr).getValues().get(i);
+            Serializable val =
+                attrVal != null ? truncateAsUTF8(attrVal.toString(), TOKEN_MAXIMUM_BYTES) : attrVal;
+            // *_txt
+            child.addField(attr + getFieldSuffix(AttributeFormat.STRING), val);
+          }
+        }
+        child.addField("id_txt", UUID.randomUUID().toString());
+        child.addField(SchemaFields.METACARD_TYPE_FIELD_NAME, schemaName);
+        child.setField("content-type_txt", "child");
+        solrInputDocument.addChildDocument(child);
+      }
+      solrInputDocument.addField("id_txt", UUID.randomUUID().toString());
+    }
+
+    // TODO: register these metacard types when a new one is seen
+    else {
+      for (AttributeDescriptor ad : schema.getAttributeDescriptors()) {
+        if (metacard.getAttribute(ad.getName()) != null) {
+          List<Serializable> attributeValues = metacard.getAttribute(ad.getName()).getValues();
+
+          if (CollectionUtils.isNotEmpty(attributeValues) && attributeValues.get(0) != null) {
+            AttributeFormat format = ad.getType().getAttributeFormat();
+            String formatIndexName = ad.getName() + getFieldSuffix(format);
+
+            if (AttributeFormat.XML.equals(format)
+                && solrInputDocument.getFieldValue(
+                        formatIndexName + getSpecialIndexSuffix(AttributeFormat.STRING))
+                    == null) {
+              List<String> parsedTexts = parseTextFrom(attributeValues);
+
+              // parsedTexts => *_txt_tokenized
+              String specialStringIndexName =
+                  ad.getName()
+                      + getFieldSuffix(AttributeFormat.STRING)
+                      + getSpecialIndexSuffix(AttributeFormat.STRING);
+              solrInputDocument.addField(specialStringIndexName, parsedTexts);
+            } else if (AttributeFormat.STRING.equals(format)
+                && solrInputDocument.getFieldValue(
+                        ad.getName() + getFieldSuffix(AttributeFormat.STRING))
+                    == null) {
+              List<Serializable> truncatedValues =
+                  attributeValues
+                      .stream()
+                      .map(
+                          value ->
+                              value != null
+                                  ? truncateAsUTF8(value.toString(), TOKEN_MAXIMUM_BYTES)
+                                  : value)
+                      .collect(Collectors.toList());
+              // *_txt
+              solrInputDocument.addField(
+                  ad.getName() + getFieldSuffix(AttributeFormat.STRING), truncatedValues);
+
+              // *_txt_tokenized
+              solrInputDocument.addField(
+                  ad.getName()
+                      + getFieldSuffix(AttributeFormat.STRING)
+                      + getSpecialIndexSuffix(AttributeFormat.STRING),
+                  attributeValues);
+            } else if (AttributeFormat.OBJECT.equals(format)) {
+              ByteArrayOutputStream byteArrayOS = new ByteArrayOutputStream();
+              List<Serializable> byteArrays = new ArrayList<>();
+
+              try (ObjectOutputStream out = new ObjectOutputStream(byteArrayOS)) {
+                for (Serializable serializable : attributeValues) {
+                  out.writeObject(serializable);
+                  byteArrays.add(byteArrayOS.toByteArray());
+                  out.reset();
+                }
+              } catch (IOException e) {
+                throw new MetacardCreationException(COULD_NOT_SERIALIZE_OBJECT_MESSAGE, e);
               }
-            } catch (IOException e) {
-              throw new MetacardCreationException(COULD_NOT_SERIALIZE_OBJECT_MESSAGE, e);
+              attributeValues = byteArrays;
             }
 
-            attributeValues = byteArrays;
-          }
+            if (AttributeFormat.GEOMETRY.equals(format)
+                && solrInputDocument.getFieldValue(formatIndexName + SchemaFields.SORT_SUFFIX)
+                    == null) {
+              solrInputDocument.addField(
+                  formatIndexName + SchemaFields.SORT_SUFFIX, createCenterPoint(attributeValues));
+            }
 
-          if (AttributeFormat.GEOMETRY.equals(format)
-              && solrInputDocument.getFieldValue(formatIndexName + SchemaFields.SORT_SUFFIX)
-                  == null) {
-            solrInputDocument.addField(
-                formatIndexName + SchemaFields.SORT_SUFFIX, createCenterPoint(attributeValues));
-          }
-
-          // Prevent adding a field already on document
-          if (solrInputDocument.getFieldValue(formatIndexName) == null) {
-            solrInputDocument.addField(formatIndexName, attributeValues);
-          } else {
-            LOGGER.trace("Skipping adding field already found on document ({})", formatIndexName);
+            // Prevent adding a field already on document
+            if (solrInputDocument.getFieldValue(formatIndexName) == null) {
+              solrInputDocument.addField(formatIndexName, attributeValues);
+            } else {
+              LOGGER.trace("Skipping adding field already found on document ({})", formatIndexName);
+            }
           }
         }
       }
-    }
 
-    if (!ConfigurationStore.getInstance().isDisableTextPath()
-        && StringUtils.isNotBlank(metacard.getMetadata())) {
-      String metadata = metacard.getMetadata();
-      if (metadata.getBytes().length < metadataMaximumBytes) {
-        try {
-          byte[] luxXml = createTinyBinary(metadata);
-          solrInputDocument.addField(LUX_XML_FIELD_NAME, luxXml);
-        } catch (XMLStreamException | SaxonApiException | IOException | RuntimeException e) {
+      if (!ConfigurationStore.getInstance().isDisableTextPath()
+          && StringUtils.isNotBlank(metacard.getMetadata())) {
+        String metadata = metacard.getMetadata();
+        if (metadata.getBytes().length < metadataMaximumBytes) {
+          try {
+            byte[] luxXml = createTinyBinary(metadata);
+            solrInputDocument.addField(LUX_XML_FIELD_NAME, luxXml);
+          } catch (XMLStreamException | SaxonApiException | IOException | RuntimeException e) {
+            LOGGER.debug(
+                "Unable to parse metadata field.  XPath support unavailable for metacard {}",
+                metacard.getId(),
+                e);
+          }
+        } else {
           LOGGER.debug(
-              "Unable to parse metadata field.  XPath support unavailable for metacard {}",
-              metacard.getId(),
-              e);
+              "Can't create binary data from metadata larger than metadata size limit. ID: {}",
+              metacard.getId());
         }
-      } else {
-        LOGGER.debug(
-            "Can't create binary data from metadata larger than metadata size limit. ID: {}",
-            metacard.getId());
       }
+
+      /*
+       * Lastly the metacardType must be added to the solr document. These are internal fields
+       */
+      String schemaName = String.format("%s#%s", schema.getName(), schema.hashCode());
+      solrInputDocument.addField(SchemaFields.METACARD_TYPE_FIELD_NAME, schemaName);
+      byte[] metacardTypeBytes = metacardTypeNameToSerialCache.getIfPresent(schemaName);
+
+      if (metacardTypeBytes == null) {
+        MetacardType coreMetacardType =
+            new MetacardTypeImpl(
+                schema.getName(), convertAttributeDescriptors(schema.getAttributeDescriptors()));
+
+        metacardTypesCache.put(schemaName, coreMetacardType);
+
+        metacardTypeBytes = serialize(coreMetacardType);
+        metacardTypeNameToSerialCache.put(schemaName, metacardTypeBytes);
+
+        addToFieldsCache(coreMetacardType.getAttributeDescriptors());
+      }
+
+      solrInputDocument.addField(SchemaFields.METACARD_TYPE_OBJECT_FIELD_NAME, metacardTypeBytes);
     }
-
-    /*
-     * Lastly the metacardType must be added to the solr document. These are internal fields
-     */
-    String schemaName = String.format("%s#%s", schema.getName(), schema.hashCode());
-    solrInputDocument.addField(SchemaFields.METACARD_TYPE_FIELD_NAME, schemaName);
-    byte[] metacardTypeBytes = metacardTypeNameToSerialCache.getIfPresent(schemaName);
-
-    if (metacardTypeBytes == null) {
-      MetacardType coreMetacardType =
-          new MetacardTypeImpl(
-              schema.getName(), convertAttributeDescriptors(schema.getAttributeDescriptors()));
-
-      metacardTypesCache.put(schemaName, coreMetacardType);
-
-      metacardTypeBytes = serialize(coreMetacardType);
-      metacardTypeNameToSerialCache.put(schemaName, metacardTypeBytes);
-
-      addToFieldsCache(coreMetacardType.getAttributeDescriptors());
-    }
-
-    solrInputDocument.addField(SchemaFields.METACARD_TYPE_OBJECT_FIELD_NAME, metacardTypeBytes);
   }
 
   /*

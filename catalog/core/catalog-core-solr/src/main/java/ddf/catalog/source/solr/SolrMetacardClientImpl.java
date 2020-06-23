@@ -780,6 +780,26 @@ public class SolrMetacardClientImpl implements SolrMetacardClient {
       }
     }
 
+    if (doc.hasChildDocuments()) {
+      for (SolrDocument solrDocument : doc.getChildDocuments()) {
+        for (String solrFieldName : solrDocument.getFieldNames()) {
+          if (metacard.getAttribute(resolver.resolveFieldName(solrFieldName)) == null) {
+            if (!resolver.isPrivateField(solrFieldName)) {
+              Collection<Object> fieldValues = solrDocument.getFieldValues(solrFieldName);
+              Attribute attr =
+                  new AttributeImpl(
+                      resolver.resolveFieldName(solrFieldName),
+                      resolver.getDocValues(solrFieldName, fieldValues));
+              metacard.setAttribute(attr);
+            }
+          } else {
+            Attribute attribute = metacard.getAttribute(resolver.resolveFieldName(solrFieldName));
+            Collection<Object> fieldValues = solrDocument.getFieldValues(solrFieldName);
+            attribute.getValues().addAll(resolver.getDocValues(solrFieldName, fieldValues));
+          }
+        }
+      }
+    }
     return metacard;
   }
 
