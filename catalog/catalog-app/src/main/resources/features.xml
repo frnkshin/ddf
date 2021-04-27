@@ -665,8 +665,8 @@
         <bundle>mvn:ddf.catalog.plugin/catalog-plugin-facet-attribute-access/${project.version}</bundle>
     </feature>
 
-    <feature name="catalog-healthcheck-docker" version="${project.version}">
-        <bundle>mvn:ddf.catalog/docker-healthcheck-endpoint/${project.version}</bundle>
+    <feature name="catalog-docker-healthcheck" version="${project.version}">
+        <bundle>mvn:ddf.catalog/catalog-docker-healthcheck/${project.version}</bundle>
     </feature>
 
     <feature name="catalog-app" version="${project.version}"
@@ -713,6 +713,7 @@
         <feature>catalog-core-attachment</feature>
         <feature>catalog-plugin-gazetteer</feature>
         <feature>catalog-facet-attribute-access-plugin</feature>
+        <feature>catalog-docker-healthcheck</feature>
     </feature>
 
 </features>

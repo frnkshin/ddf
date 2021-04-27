@@ -13,7 +13,7 @@
  */
 package org.codice.ddf.endpoints.healthcheck.docker;
 
-import javax.ws.rs.HEAD;
+import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.Response;
 
@@ -26,7 +26,7 @@ public interface DockerHealthCheck {
    *
    * @return
    */
-  @HEAD
+  @GET
   @Path("/healthcheck")
   Response getDocument();
 }

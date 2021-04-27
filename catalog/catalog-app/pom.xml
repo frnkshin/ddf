@@ -656,7 +656,7 @@
         </dependency>
         <dependency>
             <groupId>ddf.catalog</groupId>
-            <artifactId>docker-healthcheck-endpoint</artifactId>
+            <artifactId>catalog-docker-healthcheck</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
