@@ -27,6 +27,7 @@ distribution/docs/src/main/resources/content/**/*.png
 jmeter.log
 *.jmx.log
 *.jtl
+.java-version
 
 # Maven Ignores (https://raw.githubusercontent.com/github/gitignore/master/Maven.gitignore)
 target/
